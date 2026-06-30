@@ -14,7 +14,17 @@ lxml==6.1.1
     #   python-docx
 markupsafe==3.0.3
     # via jinja2
+numpy==2.5.0
+    # via pandas
+pandas==3.0.3
+    # via -r requirements.in
+python-dateutil==2.9.0.post0
+    # via pandas
 python-docx==1.2.0
     # via docxtpl
+six==1.17.0
+    # via python-dateutil
 typing-extensions==4.15.0
     # via python-docx
+tzdata==2026.2
+    # via pandas
