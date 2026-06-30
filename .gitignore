@@ -1,0 +1,15 @@
+.DS_Store
+.vscode/
+__pycache__/
+Measurements/
+Archives/
+Scratchpad/
+build/
+dist/
+Test Results/
+*.csv
+logs/
+tempCodeRunnerFile.py
+Raw Data/
+Peaks/
+output/
