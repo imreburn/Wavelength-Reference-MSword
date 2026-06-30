@@ -1,0 +1,76 @@
+name: Build CSVtoWord
+
+on:
+  push:
+    tags:
+      - 'v*'                 # only build on version tags (e.g. v1.0.0)
+  workflow_dispatch:         # allow manual build anytime from GitHub UI
+    inputs:
+      version:
+        description: 'Version label for this build'
+        required: false
+        default: 'manual'
+
+jobs:
+  build-windows:
+    runs-on: windows-2025-vs2026
+    permissions:
+      contents: write          # ← required for creating releases
+      
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: 'pip'       # cache pip packages
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build CSVtoWord
+        run: pyinstaller csv_to_docx.spec
+
+      - name: Verify builds
+        shell: bash
+        run: |
+          for exe in dist/CSVtoWord/csv_to_word.exe; do
+            if [ ! -f "$exe" ]; then
+              echo "ERROR: $exe not found"
+              exit 1
+            fi
+            echo "OK: $exe ($(du -h $exe | cut -f1))"
+          done
+
+      - name: Get build name
+        shell: bash
+        run: |
+          # On tag pushes use the tag (e.g. v1.0.0); otherwise fall back to short SHA.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "BUILD_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          else
+            echo "BUILD_NAME=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          fi
+
+      - name: Zip builds   # bundle the contents of the shared folder into one zip
+        shell: bash
+        run: |
+          cp cert_template.docx dist/CSVtoWord/
+          cp traveler_template.docx dist/CSVtoWord/
+          cd dist/CSVtoWord
+          7z a "../CSVtoWord-${BUILD_NAME}.zip" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: CSVtoWord-${{ env.BUILD_NAME }}
+          path: dist/CSVtoWord
+
+      - name: Create GitHub Release   # ← new step
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')   # only on tag pushes
+        with:
+          files: dist/*.zip
+          generate_release_notes: true   # auto-generates notes from commits
+          draft: false
