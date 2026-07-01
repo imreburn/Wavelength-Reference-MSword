@@ -85,13 +85,13 @@ def get_settings(initial_message="", initial_message_color="green"):
     )
 
     # --- Sheet selection (checkboxes live in each section below) --------
-    gen_traveler = tk.BooleanVar(value=True)
-    gen_cert = tk.BooleanVar(value=True)
+    gen_traveler = tk.BooleanVar(value=False)
+    gen_cert = tk.BooleanVar(value=False)
 
     # --- Text inputs ----------------------------------------------------
     model = tk.StringVar(value="")
-    source = tk.StringVar(value="Keysight N7778C")
-    detector = tk.StringVar(value="Keysight N7748A")
+    source = tk.StringVar(value="Keysight N7778C Tunable Laser Source")
+    detector = tk.StringVar(value="Keysight N7748A Power Meter")
 
     # --- Placeholder (hint) text support --------------------------------
     # tkinter has no native placeholder, so we show greyed-out example text
@@ -240,8 +240,8 @@ def get_settings(initial_message="", initial_message_color="green"):
 
     # --- Model and wavelength for insertion loss (certificate fields) ---
     add_text_field(
-        right_col, "Model", model,
-        placeholder="e.g. C2H2-12-H(5.5)-50-FCAPC", width=cert_field_width,
+        right_col, "Part Number", model,
+        placeholder="(Required) e.g. C2H2-12-H(5.5)-50-FCAPC", width=cert_field_width,
     )
     il_wavelength = tk.StringVar(value="")
     add_text_field(
