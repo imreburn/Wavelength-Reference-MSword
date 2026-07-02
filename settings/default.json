@@ -1,0 +1,28 @@
+{
+  "source": "Keysight N7778C Tunable Laser Source",
+  "detector": "Keysight N7748A Power Meter",
+  "part_num": "",
+  "il_wavelength": "",
+  "certified_by": "",
+  "traveler_filename": "traveler_sheet_filled.docx",
+  "traveler_decimals": {
+    "wavelength": 2,
+    "il": 1,
+    "depth": 2,
+    "width": 1
+  },
+  "cert_filename": "certificate_sheet_filled.docx",
+  "cert_decimals": {
+    "wavelength": 1,
+    "il": 1,
+    "depth": 1,
+    "width": 1
+  },
+  "extras": [
+    "",
+    "",
+    "",
+    "",
+    ""
+  ]
+}

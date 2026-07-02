@@ -13,10 +13,6 @@ modules, so the call runs exactly once per process no matter how many files
 import it. No-op off Windows.
 """
 import sys
-import logging
-
-log = logging.getLogger(__name__)
-
 
 def enable_windows_dpi_awareness():
     if not sys.platform.startswith("win"):
@@ -30,7 +26,7 @@ def enable_windows_dpi_awareness():
         except (AttributeError, OSError):
             windll.user32.SetProcessDPIAware()
     except Exception as exc:  # never let DPI setup break the GUI
-        log.debug("Could not set DPI awareness: %s", exc)
+        print("Could not set DPI awareness: %s", exc)
 
 
 enable_windows_dpi_awareness()

@@ -15,3 +15,7 @@ Peaks/
 output/
 testcases/
 msword_output/
+sigs/
+output_sheets/
+*.json
+!default.json

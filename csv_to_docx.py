@@ -1,15 +1,19 @@
 import dpi_awareness  # noqa: F401  (process-wide DPI awareness, import-time side effect)
 
+import copy
+import json
 import os
 import re
+import struct
+import subprocess
 import sys
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 
 import pandas as pd
 from datetime import datetime
-from docxtpl import DocxTemplate, RichText
-
+from docxtpl import DocxTemplate, RichText, InlineImage
+from docx.shared import Mm
 
 def app_dir():
     """Directory the app lives in: the .exe's folder when frozen by PyInstaller,
@@ -25,13 +29,170 @@ def app_dir():
 # Allowed choices for every "number of decimals" dropdown.
 DECIMAL_CHOICES = ["0", "1", "2", "3", "4", "5"]
 
+# The two sheets the user can target; exactly one is created per run.
+TARGET_TRAVELER = "Traveler Sheet"
+TARGET_CERT = "Certificate Sheet"
 
-def get_settings(initial_message="", initial_message_color="green"):
-    """Show the GUI, return a settings dict, or None if the window was closed
-    without pressing "Create documents". ``initial_message`` is shown in the
-    message area (e.g. the result of the previous run, since there is no
-    console to print to)."""
+# Matches "signature-<name>.<ext>"; the captured group is the person's name.
+_SIGNATURE_RE = re.compile(r"signature-(.+)\.(?:png|jpe?g)$", re.IGNORECASE)
+
+# Signature sizing
+SIG_HEIGHT_MM = 25
+SIG_MAX_WIDTH_MM = 40
+
+# Built-in defaults for every input field. These are used to write
+# ``settings/default.json`` on first run and as a fallback for any key a saved
+# settings file leaves out, so the app always has a complete set of values.
+DEFAULT_SETTINGS = {
+    "source": "Keysight N7778C Tunable Laser Source",
+    "detector": "Keysight N7748A Power Meter",
+    "part_num": "",
+    "il_wavelength": "",
+    "certified_by": "",
+    "traveler_filename": "traveler_sheet_filled.docx",
+    "traveler_decimals": {"wavelength": 2, "il": 1, "depth": 2, "width": 1},
+    "cert_filename": "certificate_sheet_filled.docx",
+    "cert_decimals": {"wavelength": 1, "il": 1, "depth": 1, "width": 1},
+    "extras": ["", "", "", "", ""],
+}
+
+# The settings file selected by default when the app starts.
+DEFAULT_SETTINGS_FILE = "default.json"
+
+
+def settings_dir():
+    """Folder that holds the JSON settings files, next to the app/script."""
+    return os.path.join(app_dir(), "settings")
+
+
+def ensure_default_settings():
+    """Make sure ``settings/default.json`` exists, creating it (and the folder)
+    from DEFAULT_SETTINGS the first time the app runs."""
+    os.makedirs(settings_dir(), exist_ok=True)
+    path = os.path.join(settings_dir(), DEFAULT_SETTINGS_FILE)
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_SETTINGS, f, indent=2)
+
+
+def list_setting_files():
+    """Return the sorted ``*.json`` filenames in the settings folder, with
+    ``default.json`` first if present."""
+    if not os.path.isdir(settings_dir()):
+        return []
+    files = sorted(
+        f for f in os.listdir(settings_dir()) if f.lower().endswith(".json")
+    )
+    if DEFAULT_SETTINGS_FILE in files:
+        files.remove(DEFAULT_SETTINGS_FILE)
+        files.insert(0, DEFAULT_SETTINGS_FILE)
+    return files
+
+
+def load_settings(name):
+    """Load ``settings/<name>`` merged over DEFAULT_SETTINGS so missing keys fall
+    back to the built-in defaults. Returns a full settings dict; on any read/parse
+    error it falls back to the built-in defaults."""
+    data = copy.deepcopy(DEFAULT_SETTINGS)
+    try:
+        with open(os.path.join(settings_dir(), name), "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        for key, value in loaded.items():
+            if isinstance(value, dict) and isinstance(data.get(key), dict):
+                data[key].update(value)  # merge nested (e.g. decimal counts)
+            else:
+                data[key] = value
+    except Exception:
+        pass  # missing or invalid file: keep the built-in defaults
+    return data
+
+
+def load_signatures():
+    """Return an ordered {name: image_path} dict for the signature images in the
+    sibling ``sigs`` folder, where the name is the part of the filename after
+    "signature-". Empty if the folder is missing."""
+    sig_dir = os.path.join(app_dir(), "sigs")
+    sigs = {}
+    if os.path.isdir(sig_dir):
+        for fname in sorted(os.listdir(sig_dir)):
+            m = _SIGNATURE_RE.match(fname)
+            if m:
+                sigs[m.group(1)] = os.path.join(sig_dir, fname)
+    return sigs
+
+
+def _image_pixel_size(path):
+    """Return (width_px, height_px) for a PNG or JPEG by reading only its header,
+    so we don't need a Pillow dependency. Returns None if the size can't be read."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+            # PNG: 8-byte signature, then IHDR with width/height as big-endian uint32.
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                w, h = struct.unpack(">II", head[16:24])
+                return w, h
+            # JPEG: walk the marker segments to the Start-Of-Frame (SOFn).
+            if head[:2] == b"\xff\xd8":
+                f.seek(2)
+                b = f.read(1)
+                while b and b == b"\xff":
+                    marker = f.read(1)
+                    while marker == b"\xff":  # skip fill bytes
+                        marker = f.read(1)
+                    # SOF0..SOF15 hold the dimensions (excluding non-frame markers).
+                    if 0xC0 <= marker[0] <= 0xCF and marker[0] not in (0xC4, 0xC8, 0xCC):
+                        f.read(3)  # segment length (2) + precision (1)
+                        h, w = struct.unpack(">HH", f.read(4))
+                        return w, h
+                    seg_len = struct.unpack(">H", f.read(2))[0]
+                    f.seek(seg_len - 2, 1)
+                    b = f.read(1)
+    except (OSError, struct.error):
+        pass
+    return None
+
+
+def signature_width_mm(path):
+    """Width (in mm) to render a signature at, chosen so its rendered HEIGHT is
+    SIG_HEIGHT_MM, then clamped to SIG_MAX_WIDTH_MM. Falls back to the cap if the
+    image dimensions can't be read."""
+    size = _image_pixel_size(path)
+    if not size:
+        return SIG_MAX_WIDTH_MM
+    w_px, h_px = size
+    width = SIG_HEIGHT_MM * (w_px / h_px)
+    return min(width, SIG_MAX_WIDTH_MM)
+
+
+def pick_csv_file():
+    """Pop up a file-open dialog and return the chosen CSV path, or "" if the
+    dialog was cancelled. Uses its own hidden root so it can run before the main
+    GUI window is created."""
+    root = tk.Tk()
+    root.withdraw()
+    path = filedialog.askopenfilename(
+        title="Select CSV file",
+        filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+    )
+    root.destroy()
+    return path
+
+
+def get_settings(csv_path):
+    """Show the GUI for the already-selected ``csv_path``, return a settings
+    dict, or None if the window was closed without pressing "Create documents".
+    The in-window message area is used for input-validation errors."""
     result = {"submitted": False}
+
+    # Settings files: make sure default.json exists, list the available files and load the default one to seed every input field below.
+    ensure_default_settings()
+    setting_files = list_setting_files() or [DEFAULT_SETTINGS_FILE]
+    initial_setting = (
+        DEFAULT_SETTINGS_FILE
+        if DEFAULT_SETTINGS_FILE in setting_files
+        else setting_files[0]
+    )
+    initial_data = load_settings(initial_setting)
 
     root = tk.Tk()
     root.title("Create Traveler and Certificate Sheets")
@@ -61,35 +222,74 @@ def get_settings(initial_message="", initial_message_color="green"):
         grid_row[frame] = r + 1
         return r
 
-    # --- CSV file selection ---------------------------------------------
-    csv_path = tk.StringVar()
-    csv_status = tk.StringVar(value="No file selected")
+    # --- CSV file (selected at startup) ---------------------------------
+    r = next_row(mainframe)
+    ttk.Label(mainframe, text="CSV file").grid(
+        column=0, row=r, sticky=tk.W, padx=5, pady=5
+    )
+    ttk.Label(
+        mainframe, text=os.path.basename(csv_path), foreground="green"
+    ).grid(column=1, row=r, columnspan=2, sticky=tk.W, padx=5, pady=5)
 
-    def pick_csv():
-        path = filedialog.askopenfilename(
-            title="Select CSV file",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+    # --- Target selection (which sheet to create) -----------------------
+    # A single dropdown replaces the old per-section checkboxes; exactly one
+    # sheet is created per run. Switching to the Certificate Sheet first asks
+    # the user to confirm they have reviewed the Traveler Sheet.
+    target = tk.StringVar(value=TARGET_TRAVELER)
+    prev_target = [TARGET_TRAVELER]  # last confirmed value, for reverting
+
+    def confirm_cert():
+        """Native Yes/No dialog (same style as the result popup). Returns True
+        if the user is sure, False otherwise."""
+        return messagebox.askyesno(
+            "Confirm",
+            "I have reviewed the generated Traveler Sheet and confirmed "
+            "that everything is correct.",
+            icon="warning",
+            parent=root,
         )
-        if path:
-            csv_path.set(path)
-            csv_status.set(f"Selected: {os.path.basename(path)}")
-            csv_status_label.configure(foreground="green")
+
+    def on_target_selected(_event=None):
+        if target.get() == TARGET_CERT and prev_target[0] != TARGET_CERT:
+            if not confirm_cert():
+                target.set(prev_target[0])  # revert
+                return
+        prev_target[0] = target.get()
+
+    # --- Settings file selection ----------------------------------------
+    # Lists the JSON files in the settings folder; picking one reloads every
+    # input field from that file. The handler is bound later, once all the
+    # fields it needs to update have been created (see apply_settings below).
+    setting_name = tk.StringVar(value=initial_setting)
+    r = next_row(mainframe)
+    ttk.Label(mainframe, text="Setting").grid(
+        column=0, row=r, sticky=tk.W, padx=5, pady=5
+    )
+    setting_combo = ttk.Combobox(
+        mainframe,
+        textvariable=setting_name,
+        values=setting_files,
+        state="readonly",
+        width=20,
+    )
+    setting_combo.grid(column=1, row=r, sticky=tk.W, padx=5, pady=5)
 
     r = next_row(mainframe)
-    ttk.Button(
-        mainframe, text="Select CSV file", command=pick_csv, style="Big.TButton"
-    ).grid(column=0, row=r, sticky=tk.W, padx=5, pady=5)
-    csv_status_label = ttk.Label(mainframe, textvariable=csv_status, foreground="#b00")
-    csv_status_label.grid(
-        column=1, row=r, columnspan=2, sticky=tk.W, padx=5, pady=5
+    ttk.Label(mainframe, text="Target").grid(
+        column=0, row=r, sticky=tk.W, padx=5, pady=5
     )
-
-    # --- Sheet selection (checkboxes live in each section below) --------
-    gen_traveler = tk.BooleanVar(value=False)
-    gen_cert = tk.BooleanVar(value=False)
+    target_combo = ttk.Combobox(
+        mainframe,
+        textvariable=target,
+        values=[TARGET_TRAVELER, TARGET_CERT],
+        state="readonly",
+        width=20,
+    )
+    target_combo.grid(column=1, row=r, sticky=tk.W, padx=5, pady=5)
+    target_combo.bind("<<ComboboxSelected>>", on_target_selected)
 
     # --- Text inputs ----------------------------------------------------
-    model = tk.StringVar(value="")
+    part_num = tk.StringVar(value="")
     source = tk.StringVar(value="Keysight N7778C Tunable Laser Source")
     detector = tk.StringVar(value="Keysight N7748A Power Meter")
 
@@ -115,6 +315,7 @@ def get_settings(initial_message="", initial_message_color="green"):
 
         entry.bind("<FocusIn>", lambda _e: clear())
         entry.bind("<FocusOut>", lambda _e: show())
+        entry._ph_show = show  # used by apply_settings to reset an empty field
         show()
         placeholder_entries.append((entry, show, clear))
 
@@ -172,19 +373,14 @@ def get_settings(initial_message="", initial_message_color="green"):
     add_text_field(left_col, "Detector", detector)
 
     # --- Decimal-count section builder ----------------------------------
-    def add_decimals_section(parent, title, defaults, output_default, gen_var, checkbox_label):
-        """Add a titled section beginning with an enable checkbox, followed by
-        an output-filename field and four decimal dropdowns. Returns
+    def add_decimals_section(parent, title, defaults, output_default, after_header=None):
+        """Add a titled section with an output-filename field and four decimal
+        dropdowns. ``after_header`` is an optional callable(parent) used to add
+        extra rows right below the section header. Returns
         (filename_var, decimals_dict)."""
         add_section_header(parent, title)
-
-        r = next_row(parent)
-        ttk.Label(parent, text=checkbox_label).grid(
-            column=0, row=r, sticky=tk.W, padx=5, pady=(0, 4)
-        )
-        ttk.Checkbutton(parent, variable=gen_var).grid(
-            column=1, row=r, columnspan=2, sticky=tk.W, padx=5, pady=(0, 4)
-        )
+        if after_header:
+            after_header(parent)
 
         filename_var = tk.StringVar(value=output_default)
         r = next_row(parent)
@@ -218,33 +414,48 @@ def get_settings(initial_message="", initial_message_color="green"):
             vars_[key] = var
         return filename_var, vars_
 
+    # "Certified by" dropdown: names parsed from the sigs/ folder, nothing
+    # selected by default (validated on Create).
+    signatures = load_signatures()
+    certified_by = tk.StringVar(value="")
+
+    def add_certified_by(parent):
+        r = next_row(parent)
+        ttk.Label(parent, text="Certified by").grid(
+            column=0, row=r, sticky=tk.W, padx=5, pady=3
+        )
+        ttk.Combobox(
+            parent,
+            textvariable=certified_by,
+            values=list(signatures),
+            state="readonly",
+            width=30,
+        ).grid(column=1, row=r, columnspan=2, sticky=tk.W, padx=5, pady=3)
+
     traveler_filename, traveler_vars = add_decimals_section(
         left_col,
         "Traveler Sheet",
         {"wavelength": 2, "il": 1, "depth": 2, "width": 1},
         "traveler_sheet_filled.docx",
-        gen_traveler,
-        "Create Traveler Sheet?",
     )
     cert_filename, cert_vars = add_decimals_section(
         right_col,
         "Certificate Sheet",
         {"wavelength": 1, "il": 1, "depth": 1, "width": 1},
         "certificate_sheet_filled.docx",
-        gen_cert,
-        "Create Certificate Sheet?",
+        after_header=add_certified_by,
     )
 
     # Wider entries in the certificate column so long placeholders fit.
     cert_field_width = 50
 
     # --- Model and wavelength for insertion loss (certificate fields) ---
-    add_text_field(
-        right_col, "Part Number", model,
+    part_num_entry = add_text_field(
+        right_col, "Part Number", part_num,
         placeholder="(Required) e.g. C2H2-12-H(5.5)-50-FCAPC", width=cert_field_width,
     )
     il_wavelength = tk.StringVar(value="")
-    add_text_field(
+    il_wavelength_entry = add_text_field(
         right_col,
         "Wavelength for I.L.",
         il_wavelength,
@@ -254,6 +465,7 @@ def get_settings(initial_message="", initial_message_color="green"):
 
     # --- Extra text inputs ----------------------------------------------
     extra_vars = []
+    extra_entries = []
     for i in range(1, 6):
         var = tk.StringVar(value="")
         r = next_row(right_col)
@@ -266,9 +478,52 @@ def get_settings(initial_message="", initial_message_color="green"):
         )
         add_placeholder(entry, var, f"(Optional) Note for {i}-th absorption. e.g. H^{{12}}CN, H_{{2}}O")
         extra_vars.append(var)
+        extra_entries.append(entry)
+
+    # --- Apply a settings dict to every input field ---------------------
+    def set_placeholder_field(entry, var, value):
+        """Set a placeholder-backed field: show the real value, or restore the
+        greyed-out hint when the value is empty."""
+        value = "" if value is None else str(value)
+        if value:
+            entry._placeholder_on = False
+            entry.configure(foreground=default_fg)
+            var.set(value)
+        else:
+            var.set("")
+            entry._ph_show()
+
+    def apply_settings(data):
+        """Populate every input field from a loaded settings dict."""
+        source.set(data["source"])
+        detector.set(data["detector"])
+        traveler_filename.set(data["traveler_filename"])
+        cert_filename.set(data["cert_filename"])
+        for key, var in traveler_vars.items():
+            var.set(str(data["traveler_decimals"].get(key, var.get())))
+        for key, var in cert_vars.items():
+            var.set(str(data["cert_decimals"].get(key, var.get())))
+        # Only accept a "Certified by" name that matches a known signature.
+        cb = data.get("certified_by", "")
+        certified_by.set(cb if cb in signatures else "")
+        set_placeholder_field(part_num_entry, part_num, data.get("part_num", ""))
+        set_placeholder_field(
+            il_wavelength_entry, il_wavelength, data.get("il_wavelength", "")
+        )
+        extras = data.get("extras", [])
+        for i, entry in enumerate(extra_entries):
+            set_placeholder_field(
+                entry, extra_vars[i], extras[i] if i < len(extras) else ""
+            )
+
+    def on_setting_selected(_event=None):
+        apply_settings(load_settings(setting_name.get()))
+
+    setting_combo.bind("<<ComboboxSelected>>", on_setting_selected)
+    apply_settings(initial_data)  # seed all fields from the default settings file
 
     # --- Create documents button ----------------------------------------
-    message_var = tk.StringVar(value=initial_message)
+    message_var = tk.StringVar(value="")
 
     def set_message(text, color):
         message_var.set(text)
@@ -276,20 +531,27 @@ def get_settings(initial_message="", initial_message_color="green"):
 
     def create_documents():
         strip_placeholders()  # ensure hint text is never read as real input
-        if gen_cert.get() and not model.get().strip():
+        if target.get() == TARGET_CERT and not part_num.get().strip():
             set_message(
-                'The "Model" field cannot be empty when '
-                '"Create Certificate Sheet?" is checked.',
+                'The "Part Number" field cannot be empty when the '
+                'Certificate Sheet target is selected.',
                 "red",
             )
             restore_placeholders()  # bring back hint text after stripping
             return
+        if target.get() == TARGET_CERT and not certified_by.get():
+            set_message(
+                'Please select a "Certified by" name for the Certificate Sheet.',
+                "red",
+            )
+            restore_placeholders()
+            return
         set_message("", "red")
         result["submitted"] = True
-        result["csv_path"] = csv_path.get()
-        result["gen_traveler"] = gen_traveler.get()
-        result["gen_cert"] = gen_cert.get()
-        result["model"] = model.get()
+        result["csv_path"] = csv_path
+        result["target"] = target.get()
+        result["certified_by"] = certified_by.get()
+        result["part_num"] = part_num.get()
         result["source"] = source.get()
         result["detector"] = detector.get()
         result["traveler"] = {k: int(v.get()) for k, v in traveler_vars.items()}
@@ -316,7 +578,7 @@ def get_settings(initial_message="", initial_message_color="green"):
     message_label = ttk.Label(
         mainframe,
         textvariable=message_var,
-        foreground=initial_message_color,
+        foreground="red",
         wraplength=400,
         justify=tk.CENTER,
     )
@@ -385,10 +647,12 @@ def build_rows_cert(df, params):
         il_vals = group["I.L."].dropna()
         if pd.notna(closest["I.L."]):
             loss = f"{closest['I.L.']:.{params['il']}f} dB"
+            il_wl = f"@ {closest['Wavelength (nm)']:.{params['wavelength']}f} nm"
         elif len(il_vals):
             loss = f"{il_vals.max():.{params['il']}f} dB"
+            il_wl = f"@ {group.loc[il_vals.idxmax()]['Wavelength (nm)']:.{params['wavelength']}f} nm"
         else:
-            loss = "NA"
+            loss, il_wl = "NA", ""
 
         temp_vals = group["Temperature"].dropna()
 
@@ -401,8 +665,9 @@ def build_rows_cert(df, params):
         certs.append({
             "date": closest["Date"],
             "serial": prefix,
+            "ilwavelength": il_wl,
             "loss": loss,
-            "temperature": f"{temp_vals.iloc[0]}" if len(temp_vals) else "",
+            "temperature": f"{temp_vals.iloc[0]}" if len(temp_vals) else "23",
             "cells": [
                 {
                     "wavelength": f"{row['Wavelength (nm)']:.{params['wavelength']}f}",
@@ -415,28 +680,60 @@ def build_rows_cert(df, params):
     return certs
 
 
+def show_result(message, color):
+    """Show the outcome of the run in a small popup window, then return so the
+    program can exit. ``color`` is "red" for errors, anything else for success."""
+    root = tk.Tk()
+    root.withdraw()
+    if color == "red":
+        messagebox.showerror("Result", message)
+    else:
+        messagebox.showinfo("Result", message)
+    root.destroy()
+
+
+def open_file(path):
+    """Hand a file to the OS default app (Word for .docx) as a detached process,
+    so it stays open after this program exits."""
+    if sys.platform.startswith("win"):
+        os.startfile(path)               # returns immediately, Word runs on its own
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])  # fire-and-forget
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
 def main():
-    # Loop so the user can create sheets repeatedly; closing/cancelling the
-    # window (get_settings returns None) ends the program. The status message
-    # from each run is shown in the next window, since there is no console.
-    message, color = "", "green"
-    while True:
-        settings = get_settings(message, color)
-        if settings is None:
-            return
-        message, color = run_once(settings)
+    # Ask for the CSV up front, collect settings once, generate the sheets, show
+    # the result in a popup, then open the generated files and exit (no looping).
+    # The popup is dismissed before the files open so Word doesn't steal focus
+    # from a message the user still needs to read.
+    csv_path = pick_csv_file()
+    if not csv_path:  # dialog cancelled: nothing to do
+        return
+
+    settings = get_settings(csv_path)
+    if settings is None:  # window closed without pressing "Create"
+        return
+
+    message, color, paths = run_once(settings)
+    show_result(message, color)
+    for path in paths:
+        open_file(path)
 
 
 def run_once(settings):
-    """Generate the requested sheets. Returns (message, color) describing the
-    outcome, to be displayed in the GUI on the next loop."""
+    """Generate the requested sheets. Returns (message, color, paths): the
+    outcome message/colour for the result popup and the list of generated files
+    to open afterwards (empty on error or when nothing was created)."""
     if not settings["csv_path"]:
-        return "No CSV file selected.", "red"
+        return "No CSV file selected.", "red", []
 
     try:
-        return _generate(settings), "green"
-    except Exception as exc:  # no console, so surface failures in the GUI
-        return f"Error: {exc}", "red"
+        message, paths = _generate(settings)
+        return message, "green", paths
+    except Exception as exc:  # no console, so surface failures in the popup
+        return f"Error: {exc}", "red", []
 
 
 def _generate(settings):
@@ -447,11 +744,13 @@ def _generate(settings):
     detector = settings["detector"]
 
     # Make sure the output folder exists (anchored to the app, not the CWD).
-    output_dir = os.path.join(app_dir(), "msword_output")
+    output_dir = os.path.join(app_dir(), "output_sheets")
     os.makedirs(output_dir, exist_ok=True)
 
+    paths = []  # generated files, in the order they should be opened
+
     # Traveler sheet
-    if settings["gen_traveler"]:
+    if settings["target"] == TARGET_TRAVELER:
         traveler_rows = build_rows(df, settings["traveler"])
         doc_travel = DocxTemplate(os.path.join(app_dir(), "traveler_template.docx"))
         doc_travel.render({
@@ -459,28 +758,32 @@ def _generate(settings):
             "detector": detector,
             "rows": traveler_rows,
         })
-        doc_travel.save(os.path.join(output_dir, settings["traveler_filename"]))
+        traveler_out = os.path.join(output_dir, settings["traveler_filename"])
+        doc_travel.save(traveler_out)
+        paths.append(traveler_out)
+        return "Traveler sheet created.", paths
 
     # Certificate sheet (one per group), using the certificate decimal settings.
-    if settings["gen_cert"]:
-        cert_rows = build_rows_cert(df, settings["cert"])
-        doc_cert = DocxTemplate(os.path.join(app_dir(), "cert_template.docx"))
-        doc_cert.render({
-            "model": settings["model"],
-            "source": source,
-            "detector": detector,
-            "rows": cert_rows,
-        })
-        doc_cert.save(os.path.join(output_dir, settings["cert_filename"]))
+    cert_rows = build_rows_cert(df, settings["cert"])
+    doc_cert = DocxTemplate(os.path.join(app_dir(), "cert_template.docx"))
 
-    if settings["gen_traveler"] and settings["gen_cert"]:
-        return "Done: traveler and certificate sheets created."
-    elif settings["gen_traveler"]:
-        return "Done: traveler sheet created."
-    elif settings["gen_cert"]:
-        return "Done: certificate sheet created."
-    else:
-        return "Nothing selected: no sheets created."
+    # Signature: look up the chosen name's image and scale it down for insertion.
+    sig_name = settings["certified_by"]
+    sig_path = load_signatures().get(sig_name)
+    sig_image = InlineImage(doc_cert, sig_path, width=Mm(signature_width_mm(sig_path))) if sig_path else ""
+
+    doc_cert.render({
+        "model": settings["part_num"],
+        "source": source,
+        "detector": detector,
+        "rows": cert_rows,
+        "signame": sig_name,
+        "sigimage": sig_image,
+    })
+    cert_out = os.path.join(output_dir, settings["cert_filename"])
+    doc_cert.save(cert_out)
+    paths.append(cert_out)
+    return "Certificate sheet created.", paths
 
 
 if __name__ == "__main__":
