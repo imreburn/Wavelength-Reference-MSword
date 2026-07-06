@@ -18,7 +18,7 @@ block_cipher = None
 
 
 a = Analysis(
-    ['csv_to_docx.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     # Ship the Word templates next to the exe (dest '.') so the script's plain
@@ -51,7 +51,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,        # onedir: binaries go in COLLECT, not the exe
-    name='csv_to_docx',
+    name='genPinkCert',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

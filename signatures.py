@@ -30,8 +30,7 @@ def load_signatures():
 
 
 def _image_pixel_size(path):
-    """Return (width_px, height_px) for a PNG or JPEG by reading only its header,
-    so we don't need a Pillow dependency. Returns None if the size can't be read."""
+    """Return (width_px, height_px) for a PNG or JPEG by reading only its header, so we don't need a Pillow dependency. Returns None if the size can't be read."""
     try:
         with open(path, "rb") as f:
             head = f.read(24)
