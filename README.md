@@ -70,10 +70,11 @@
 
 ### Wavelength for I.L. (Insertion loss)
 
-- If there are multiple entries under the same serial number, the user can decide which insertion loss value is shown in the "Insertion loss" field in the Certificate sheet by choosing the wavelength of the desired absorption.
-- If this field is left empty, it passes **0**. Then the absorption with the shortest wavelength is selected.
+- If there are multiple entries under the same serial number, the user can decide which insertion loss value is shown in the "Insertion loss" field in the Certificate sheet by choosing the wavelength (in nm) of the desired absorption.
 - If this field is not empty, the program selects the absorption with the wavelength **closest** to the entered value.
-- If there are multiple entries under the same serial number, the wavelength of the selected absorption is written as "@ 1234.5 nm" next to "Insertion loss" in the Certificate sheet. The number of decimals depends on the value from the "Decimals - Wavelength" field.
+- If this field is left empty or the *closest* entry does not have I.L. record, the largest I.L. recorded under the serial number is selected.
+- The peak wavelength of the selected absorption is appended to "Insertion loss" as "@ 1234.5 nm" in the Certificate sheet. The number of decimals depends on the value from the "Decimals - Wavelength" field.
+- If no I.L. value is found under the given serial number, "NA" is written for the "Insertion loss" entry under the "Measured" column. And no wavelength will be appended to "Insertion loss".
 
 ### Extra inputs to describe absorptions
 

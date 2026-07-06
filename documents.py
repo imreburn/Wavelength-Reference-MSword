@@ -70,7 +70,7 @@ def build_rows_cert(df, params):
         closest = group.loc[distances.idxmin()]
         il_vals = group["I.L."].dropna()
         
-        if pd.notna(closest["I.L."]):
+        if pd.notna(closest["I.L."]) and params["il_wavelength"] != 0:
             loss = f"{closest['I.L.']:.{params['il']}f} dB"
             il_wl = f"@ {closest['Wavelength (nm)']:.{params['wavelength']}f} nm"
         elif len(il_vals):
