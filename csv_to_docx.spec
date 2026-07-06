@@ -4,12 +4,12 @@
 #
 #     pyinstaller csv_to_docx.spec
 #
-# Output: dist/CSVtoWord/   <- distribute this whole folder.
-#         dist/CSVtoWord/csv_to_docx.exe   <- double-click to run.
+# Output: dist/genPinkCert/   <- distribute this whole folder.
+#         dist/genPinkCert/csv_to_docx.exe   <- double-click to run.
 #
 # contents_directory='.' keeps the classic flat layout (PyInstaller < 6
 # behaviour): the exe, its support files, AND the two .docx templates all sit
-# side by side in dist/CSVtoWord/. The script locates the templates (and
+# side by side in dist/genPinkCert/. The script locates the templates (and
 # writes 'msword_output/') via app_dir(), which resolves to the .exe's own
 # folder when frozen -- so it works no matter the current working directory,
 # including when launched from a Windows shortcut.
@@ -75,7 +75,7 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='CSVtoWord',
+    name='genPinkCert',
     # Flat layout: put everything (incl. templates) beside the exe instead of
     # in an '_internal' subfolder. This is what lets the relative paths work.
     contents_directory='.',
