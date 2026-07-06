@@ -1,3 +1,20 @@
+- [genPinkCert](#genpinkcert)
+  - [Workflow](#workflow)
+    - [Create a Traveler (Pink) sheet](#create-a-traveler-pink-sheet)
+    - [Create Certificate sheet(s)](#create-certificate-sheets)
+  - [Details](#details)
+    - [Select a CSV file containing peak(s) data](#select-a-csv-file-containing-peaks-data)
+    - [Setting - Default values in the fields](#setting---default-values-in-the-fields)
+    - [Test Equipment](#test-equipment)
+    - [Output filename](#output-filename)
+    - [Decimals](#decimals)
+    - [Certified by - The person who signs the Certificate sheet.](#certified-by---the-person-who-signs-the-certificate-sheet)
+    - [Part Number](#part-number)
+    - [Wavelength for I.L. (Insertion loss)](#wavelength-for-il-insertion-loss)
+    - [Extra inputs to describe absorptions](#extra-inputs-to-describe-absorptions)
+    - [Others - Traveler sheet](#others---traveler-sheet)
+    - [Others - Certificate sheet](#others---certificate-sheet)
+
 # genPinkCert
 
 - **genPinkCert** reads peaks data (a CSV file saved from **WavelengthSweep**) and produces one formatted MS Word document (Traveler (Pink) or Certificate sheet) at a time.
@@ -7,7 +24,7 @@
 
 ### Create a Traveler (Pink) sheet
 
-1. [Select a CSV file including peaks data](#Select a CSV file containing peak(s) data)
+1. [Select a CSV file including peaks data](#select-a-csv-file-containing-peaks-data)
 2. (Optional) Load a setting
 3. Select Target as **Traveler sheet**
 4. (Optional) Enter names of instruments used for testing.
