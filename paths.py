@@ -19,3 +19,11 @@ def app_dir():
 def settings_dir():
     """Folder that holds the JSON settings files, next to the app/script."""
     return os.path.join(app_dir(), "settings")
+
+
+def input_csvs_dir():
+    """Folder the CSV picker opens in by default, next to the app/script.
+    Created on first access if it doesn't exist yet."""
+    path = os.path.join(app_dir(), "input_csvs")
+    os.makedirs(path, exist_ok=True)
+    return path

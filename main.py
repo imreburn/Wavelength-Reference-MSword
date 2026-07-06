@@ -24,14 +24,15 @@ def main():
     if not csv_path:  # dialog cancelled: nothing to do
         return
 
-    settings = get_settings(csv_path)
-    if settings is None:  # window closed without pressing "Create"
-        return
+    while True:
+        settings = get_settings(csv_path)
+        if settings is None:  # window closed without pressing "Create"
+            return
 
-    message, color, paths = run_once(settings)
-    show_result(message, color)
-    for path in paths:
-        open_file(path)
+        message, color, paths = run_once(settings)
+        show_result(message, color)
+        for path in paths:
+            open_file(path)
 
 
 if __name__ == "__main__":

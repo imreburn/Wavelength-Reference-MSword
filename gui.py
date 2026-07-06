@@ -13,6 +13,7 @@ from config import (
     list_setting_files,
     load_settings,
 )
+from paths import input_csvs_dir
 from signatures import load_signatures
 
 
@@ -24,6 +25,7 @@ def pick_csv_file():
     root.withdraw()
     path = filedialog.askopenfilename(
         title="Select CSV file",
+        initialdir=input_csvs_dir(),
         filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
     )
     root.destroy()
@@ -76,7 +78,7 @@ def get_settings(csv_path):
 
     # --- CSV file (selected at startup) ---------------------------------
     r = next_row(mainframe)
-    ttk.Label(mainframe, text="CSV file").grid(
+    ttk.Label(mainframe, text="Peak data from").grid(
         column=0, row=r, sticky=tk.W, padx=5, pady=5
     )
     ttk.Label(
@@ -245,10 +247,10 @@ def get_settings(csv_path):
 
         vars_ = {}
         labels = [
-            ("wavelength", "Wavelength Decimals"),
-            ("il", "I.L. Decimals"),
-            ("depth", "Depth Decimals"),
-            ("width", "Width Decimals"),
+            ("wavelength", "Decimals - Wavelength"),
+            ("il", "Decimals - I.L."),
+            ("depth", "Decimals - Depth"),
+            ("width", "Decimals - Width"),
         ]
         for key, label in labels:
             var = tk.StringVar(value=str(defaults[key]))

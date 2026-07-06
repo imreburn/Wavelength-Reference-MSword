@@ -19,3 +19,4 @@ sigs/
 output_sheets/
 *.json
 !default.json
+input_csvs/
