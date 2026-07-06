@@ -7,7 +7,7 @@
 
 ### Create a Traveler (Pink) sheet
 
-1. [Select a CSV file including peaks data](###Select a CSV file containing peak(s) data)
+1. [Select a CSV file including peaks data](#Select a CSV file containing peak(s) data)
 2. (Optional) Load a setting
 3. Select Target as **Traveler sheet**
 4. (Optional) Enter names of instruments used for testing.
@@ -19,7 +19,7 @@
 
 ### Create Certificate sheet(s)
 
-1. [Select a CSV file including peaks data](###Select a CSV file containing peak(s) data)
+1. [Select a CSV file including peaks data](#Select a CSV file containing peak(s) data)
 2. (Optional) Load a setting
 3. Select Target as **Certificate sheet**. A warning pop-up asks whether the user has created and reviewed the corresponding traveler sheet.
 4. (Optional) Enter names of instruments used for testing.
