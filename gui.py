@@ -268,19 +268,19 @@ def get_settings(csv_path):
             vars_[key] = var
         return filename_var, vars_
 
-    # "Certified by" dropdown: names parsed from the sigs/ folder, nothing
+    # "signed by" dropdown: names parsed from the sigs/ folder, nothing
     # selected by default (validated on Create).
     signatures = load_signatures()
-    certified_by = tk.StringVar(value="")
+    signed_by = tk.StringVar(value="")
 
-    def add_certified_by(parent):
+    def add_signed_by(parent):
         r = next_row(parent)
-        ttk.Label(parent, text="Certified by").grid(
+        ttk.Label(parent, text="Signed by").grid(
             column=0, row=r, sticky=tk.W, padx=5, pady=3
         )
         ttk.Combobox(
             parent,
-            textvariable=certified_by,
+            textvariable=signed_by,
             values=list(signatures),
             state="readonly",
             width=30,
@@ -297,7 +297,7 @@ def get_settings(csv_path):
         "Certificate Sheet",
         {"wavelength": 1, "il": 1, "depth": 1, "width": 1},
         "certificate_sheet_filled.docx",
-        after_header=add_certified_by,
+        after_header=add_signed_by,
     )
 
     # Wider entries in the certificate column so long placeholders fit.
@@ -357,9 +357,9 @@ def get_settings(csv_path):
             var.set(str(data["traveler_decimals"].get(key, var.get())))
         for key, var in cert_vars.items():
             var.set(str(data["cert_decimals"].get(key, var.get())))
-        # Only accept a "Certified by" name that matches a known signature.
-        cb = data.get("certified_by", "")
-        certified_by.set(cb if cb in signatures else "")
+        # Only accept a "signed by" name that matches a known signature.
+        cb = data.get("signed_by", "")
+        signed_by.set(cb if cb in signatures else "")
         set_placeholder_field(part_num_entry, part_num, data.get("part_num", ""))
         set_placeholder_field(
             il_wavelength_entry, il_wavelength, data.get("il_wavelength", "")
@@ -393,9 +393,9 @@ def get_settings(csv_path):
             )
             restore_placeholders()  # bring back hint text after stripping
             return
-        if target.get() == TARGET_CERT and not certified_by.get():
+        if target.get() == TARGET_CERT and not signed_by.get():
             set_message(
-                'Please select a "Certified by" name for the Certificate Sheet.',
+                'Please select a "Signed by" name for the Certificate Sheet.',
                 "red",
             )
             restore_placeholders()
@@ -404,7 +404,7 @@ def get_settings(csv_path):
         result["submitted"] = True
         result["csv_path"] = csv_path
         result["target"] = target.get()
-        result["certified_by"] = certified_by.get()
+        result["signed_by"] = signed_by.get()
         result["part_num"] = part_num.get()
         result["source"] = source.get()
         result["detector"] = detector.get()

@@ -1,4 +1,5 @@
 - [genPinkCert](#genpinkcert)
+  - [Download \& Extract](#download--extract)
   - [Workflow](#workflow)
     - [Create a Traveler (Pink) sheet](#create-a-traveler-pink-sheet)
     - [Create Certificate sheet(s)](#create-certificate-sheets)
@@ -8,7 +9,7 @@
     - [Test Equipment](#test-equipment)
     - [Output filename](#output-filename)
     - [Decimals](#decimals)
-    - [Certified by - The person who signs the Certificate sheet.](#certified-by---the-person-who-signs-the-certificate-sheet)
+    - [Signed by](#signed-by)
     - [Part Number](#part-number)
     - [Wavelength for I.L. (Insertion loss)](#wavelength-for-il-insertion-loss)
     - [Extra inputs to describe absorptions](#extra-inputs-to-describe-absorptions)
@@ -20,11 +21,22 @@
 - **genPinkCert** reads peaks data (a CSV file saved from **WavelengthSweep**) and produces one formatted MS Word document (Traveler (Pink) or Certificate sheet) at a time.
 - It is designed to create documents for one or more samples of the same kind. Users may pre-process the CSV file if needed.
 
+## Download & Extract
+
+- Please download the latest version (`genPinkCert-vx.x.x.zip`) from **Releases** on the right side.
+- I would advise to download and extract the `.zip` to where it is not synced in a cloud. Instead, a shortcut linked to the executable (`genPinkCert.exe`) can be created in Desktop after extracting.
+- After downloading the `.zip`, **unblock it before extracting**:
+  1. Right-click the downloaded `.zip` → **Properties**.
+  2. Check **Unblock** at the bottom → **OK**.
+  3. Now extract the `.zip`.
+- Otherwise Windows may block the execution. Users need to click "More Info" and "Run Anyway" to unblock it once.
+- The executable, template `.docx` files, and `_internal` folder should live in the same folder.
+
 ## Workflow
 
 ### Create a Traveler (Pink) sheet
 
-1. [Select a CSV file including peaks data](#select-a-csv-file-containing-peaks-data)
+1. Select a CSV file including peaks data
 2. (Optional) Load a setting
 3. Select Target as **Traveler sheet**
 4. (Optional) Enter names of instruments used for testing.
@@ -36,11 +48,11 @@
 
 ### Create Certificate sheet(s)
 
-1. [Select a CSV file including peaks data](#Select a CSV file containing peak(s) data)
+1. Select a CSV file including peaks data
 2. (Optional) Load a setting
 3. Select Target as **Certificate sheet**. A warning pop-up asks whether the user has created and reviewed the corresponding traveler sheet.
 4. (Optional) Enter names of instruments used for testing.
-5. Select who signs the generated certificate sheet.
+5. Select who sign the generated certificate sheet.
 6. Enter the part number.
 7. (Optional) Set parameters (wavelength for I.L., output filename, decimals, extra inputs)
 8. Click "Create"
@@ -52,7 +64,8 @@
 
 ### Select a CSV file containing peak(s) data
 
-- A file-open dialog pops up to let users select a file. The `input_csvs` folder is opened by default.
+- A file-open dialog pops up to let users select a file.
+- The `input_csvs` folder is opened by default.
 
 ### Setting - Default values in the fields
 
@@ -73,12 +86,12 @@
 - How many digits are shown in each field can be set.
 - It is rounded by the next significant digit.
 
-### Certified by - The person who signs the Certificate sheet.
+### Signed by
 
-- Saved signature images in the `sigs` folder are listed under the "Certified by" field.
-- One signature image file for each person.
+- Saved signature images in the `sigs` folder are listed under the "Signed by" field.
 - Filename: The filename must have `signature-Name.png` format (e.g. "signature-Jane Doe.png"). **Write the name how it would be written below the signature**. It is also case-sensitive (e.g. "Jane Doe", instead of "jane doe").
 - The signature image should have **transparent background** since it is in front of the text.
+- One signature image file for each person.
 
 ### Part Number
 
