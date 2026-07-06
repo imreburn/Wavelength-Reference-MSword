@@ -60,6 +60,7 @@ jobs:
           cp traveler_template.docx dist/genPinkCert/
           mkdir -p dist/genPinkCert/sigs
           mkdir -p dist/genPinkCert/settings
+          mkdir -p dist/genPinkCert/input_csvs
           cp settings/default.json dist/genPinkCert/settings/
           cd dist/genPinkCert
           7z a "../genPinkCert-${BUILD_NAME}.zip" .
