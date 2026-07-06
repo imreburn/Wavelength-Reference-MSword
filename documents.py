@@ -151,7 +151,7 @@ def _generate(settings):
     doc_cert = DocxTemplate(os.path.join(app_dir(), "cert_template.docx"))
 
     # Signature: look up the chosen name's image and scale it down for insertion.
-    sig_name = settings["certified_by"]
+    sig_name = settings["signed_by"]
     sig_path = load_signatures().get(sig_name)
     sig_image = InlineImage(doc_cert, sig_path, width=Mm(signature_width_mm(sig_path))) if sig_path else ""
 
